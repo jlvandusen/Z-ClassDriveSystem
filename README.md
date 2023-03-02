@@ -1,5 +1,5 @@
 # Z-Class BB8 Drive System
-* Shared Code Base for Joe's Drive V2 using AdaFruit Feather CPUs and SND Boards
+* Shared Code Base for My Custom Drive system as well as shared Joe's Drive V2 using AdaFruit Feather CPUs and SND Boards
 * This will support a complete PCB delivered solution to simplify and provide cost savings for future development.
 * utilizes ESP32 and Feather based CPUs
 * Simplified but adaptable Dome Controls
