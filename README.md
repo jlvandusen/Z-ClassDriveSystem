@@ -6,7 +6,7 @@
 * Land, Sea and Air control schemas supporting Wifi, BT and more...
 * This will contain all the code for my Z-Class BB8 Drive System
 
-![Z-ClassDriveSystem](https://github.com/jlvandusen/Z-ClassDriveSystem/blob/main/Z-Class%20System.png)
+![Z-ClassDriveSystem](https://github.com/jlvandusen/Z-ClassDriveSystem/blob/main/Z-Class%20System%20v2.png)
 
 ## Hardware setup
 This drive is everything including the kitchen sink, remote starter, easy to configure ESP32 to Move or Xbox controllers (no other hardware needed), Single PCB board with all needed connections
