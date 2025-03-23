@@ -20,7 +20,8 @@
   //  * https://github.com/espressif/arduino-esp32/tree/master/libraries/Preferences - Equivilent to the EEPROM Controls
   //  * https://www.andymark.com/products/neverest-classic-60-gearmotor?Power%20Connector=Anderson%20Powerpole%2015A%20(am-3103)&quantity=1> - Dome Rotation with Encoder
   //
-  //   Joe's Drive V2 / Z-Drive from James VanDusen
+  //   Joe's Drive V2 / Z-Drive from James VanDusen Main drive mechanism - Updated 3/11/25
+  // * Utilizes version 9.2 All_In_One_SHADOW_board
   // * Primary CPU uses ESP32 HUZZAH32
   // * Written by James VanDusen - https://www.facebook.com/groups/799682090827096
   // * You will need ESP32 Hardware: 
@@ -28,11 +29,12 @@
   // * ESp32 Board Libraries: https://learn.adafruit.com/adafruit-huzzah32-esp32-feather/pinouts?view=all#using-with-arduino-ide
   // * 
   // * Utilizes ESP32NOW technology over WiFi to talk between Dome and Body - need to capture the Wifi MAC during bootup.
-  // * On Line 241 - replace this with the mac of dome uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  // * On Line 249 - replace this with the mac of dome uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
   // * Modified ESP32 BT Host Library https://github.com/reeltwo/PSController from Mimir
   // * 
   // * Libraries Required
-  // * https://github.com/netlabtoolkit/VarSpeedServo - Servo Controls for Feather (Non ESP32)
+  // * https://github.com/reeltwo/PSController  - Modified Playstation Library
+  // * https://github.com/ptlug-official/ServoSpeedControl?form=MG0AV3
   // * https://github.com/madhephaestus/ESP32Encoder/  - Encoder Supporting ESP32 boards
   // * https://github.com/reeltwo/PSController - Modified USBhost Controller for PS3 Move Nav/Xbox Controllers
   // * https://github.com/ERROPiX/ESP32_AnalogWrite - Used for Proper PWM with ESP32 devices
@@ -250,7 +252,9 @@
     Preferences preferences;
     PSController driveController(DRIVE_CONTROLLER_MAC); //define the drive an dome Controller variable to be used against the Nav1 and Nav2 controllers.
     PSController domeController(DOME_CONTROLLER_MAC);
-    ESP32Encoder encoder;
+
+    ESP32Encoder domeSpinEnc; 
+
   #endif
 
   #ifdef enableESPNOW
@@ -363,7 +367,6 @@
     bool controllerConnected = false;
     bool Send_Rec = false;
     bool DomeServoMode = false;
-    int32_t encoderValue = 0;
 
   #endif
   
@@ -437,13 +440,19 @@
   
   // End EasyTransfer Setup =========================
 
-  #ifdef defined(MK3_Dome) || defined(V2_Drive)
-    #include <VarSpeedServo.h>
-    VarSpeedServo leftServo;
-    VarSpeedServo rightServo;
-    int Joy2Ya, Joy2XLowOffset, Joy2XHighOffset, Joy2XLowOffsetA, Joy2XHighOffsetA, ServoLeft, ServoRight;
-    double Joy2X, Joy2Y, LeftJoy2X, LeftJoy2Y, Joy2XEase, Joy2YEase,  Joy2XEaseMap;
+  #ifdef MK3_Dome
+      #include <VarSpeedServo.h>
+      VarSpeedServo leftServo;
+      VarSpeedServo rightServo;
+      int Joy2Ya, Joy2XLowOffset, Joy2XHighOffset, Joy2XLowOffsetA, Joy2XHighOffsetA, ServoLeft, ServoRight;
+      double Joy2X, Joy2Y, LeftJoy2X, LeftJoy2Y, Joy2XEase, Joy2YEase,  Joy2XEaseMap;
   #endif 
+  #ifdef V2_Drive
+    #include <ESP32Servo.h>
+//    #include <ServoSpeedControl.h>
+    Servo leftServo;
+    Servo rightServo;
+  #endif
   
   double Joy2YEaseMap;
 
@@ -480,8 +489,14 @@
   int driveAccel;
   int potOffsetS2S;
   int domeTiltPotOffset;
-
   
+  #ifdef V2_Drive
+    volatile int ticks = 0;
+    const int ticksPerRotation = 1440; // NeveRest has 1440 ticks per rotation
+    const int maxTicks = 2880; 
+    int encoderValue = 0; 
+  #endif
+    
   // the speedArray is used to create an S curve for the 'throttle' of bb8
   int speedArray[] = {0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,4,4,4,5,5,5,5,6,6,7,7,8,8,9,
   9,10,10,11,12,12,13,13,14,15,16,16,17,18,19,19,20,21,22,23,24,25,26,26,27,28,29,30,
@@ -505,10 +520,7 @@
   unsigned long IMUMillis, lastRecMillis, moveDataMillis, lastReceivedMillis;
   unsigned long lastBatteryUpdate;
   
-  
 
-  
-  
   //PID1 is for the side to side tilt
   double Pk1 = 14;  
   double Ik1 = 0;
@@ -569,17 +581,28 @@
       #endif
       
   
-      #ifdef defined(MK3_Dome) || defined(V2_Drive) // MK3_Dome || V2_drive
-      leftServo.attach(leftDomeTiltServo);
-      rightServo.attach(rightDomeTiltServo);
-      leftServo.write(95,50, false); 
-      rightServo.write(90, 50, false);
+      #ifdef MK3_Dome // MK3_Dome || V2_drive
+        leftServo.attach(leftDomeTiltServo);
+        rightServo.attach(rightDomeTiltServo);
+        leftServo.write(95,50, false); 
+        rightServo.write(90, 50, false);
       #endif
-
+      #ifdef V2_Drive
+        leftServo.attach(leftDomeTiltServo);
+        rightServo.attach(rightDomeTiltServo);
+      
+        // Move servos to start positions
+        leftServo.write(95); 
+        rightServo.write(90); 
+      
+        // Give time for servos to reach positions
+        delay(1000);  // Adjust the delay as needed
+      #endif
+      
       #ifndef V2_Drive
-      RecIMU.begin(details(recIMUData), &Serial2);
-      RecRemote.begin(details(recFromRemote), &Serial1);
-      SendBody.begin(details(sendTo), &Serial1);
+        RecIMU.begin(details(recIMUData), &Serial2);
+        RecRemote.begin(details(recFromRemote), &Serial1);
+        SendBody.begin(details(sendTo), &Serial1);
       #else
         // Try to initialize!
         if (!mpu.begin()) {
@@ -650,12 +673,11 @@
         delay(100);
         
         // Attach the encoder pins
-        ESP32Encoder::useInternalWeakPullResistors = UP;
-        encoder.attachSingleEdge(motorEncoder_pin_A, motorEncoder_pin_B);
-        // Set the initial count to 0
-        encoder.clearCount();
+        ESP32Encoder::useInternalWeakPullResistors = UP; // Enable pull-up resistors
+        domeSpinEnc.attachSingleEdge(motorEncoder_pin_A, motorEncoder_pin_B); // Attach encoder pins
+        domeSpinEnc.clearCount(); 
         
-    #endif
+      #endif
       #ifndef V2_Drive
         pinMode(enablePin, OUTPUT);  // enable pin
         pinMode(S2SenablePin, OUTPUT); //enable pin for S2S
@@ -678,6 +700,8 @@
         pinMode(flyWheelMotor_pwm, OUTPUT);  // Speed of Motor2 on Motor Driver 2 
         pinMode(flyWheelMotor_pin_A, OUTPUT);  // Direction
         pinMode(flyWheelMotor_pin_B, OUTPUT);
+        pinMode(hallEffectSensor_Pin, INPUT);
+        attachInterrupt(digitalPinToInterrupt(hallEffectSensor_Pin), hallSensorISR, CHANGE); // Interrupt to handle hall sensor state changes
 
         WiFi.mode(WIFI_STA); // Set device as a Wi-Fi Station
       
@@ -689,7 +713,6 @@
         // Once ESPNow is successfully Init, we will register for Send CB to
         // get the status of Trasnmitted packet
         esp_now_register_send_cb(OnDataSent);
-      
         esp_now_peer_info_t peerInfo;   // Register peer ESPNOW chip
         memcpy(peerInfo.peer_addr, broadcastAddress, 6);
         peerInfo.channel = 0;  
@@ -702,7 +725,6 @@
         }
         // Register for a callback function that will be called when data is received
         esp_now_register_recv_cb(OnDataRecv);
-        
       #endif
       
       #ifdef serialSound

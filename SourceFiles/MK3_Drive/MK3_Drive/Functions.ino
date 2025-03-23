@@ -136,6 +136,7 @@
             DEBUG_PRINTLN(Fwd);
           }
         }
+        
       }
     #endif
 
@@ -677,17 +678,124 @@
       ServoRight = Joy2Ya;
       ServoLeft = Joy2Ya;
     }
-   
-    leftServo.write(constrain(map(ServoLeft, -90, 90, 0, 180),0, 180) +5, domeSpeed, false); 
-    rightServo.write(constrain(map(ServoRight,-90, 90, 180, 0), 0, 180), domeSpeed, false);
-    
+    #ifndef V2_Drive
+      leftServo.write(constrain(map(ServoLeft, -90, 90, 0, 180),0, 180) +5, domeSpeed, false); 
+      rightServo.write(constrain(map(ServoRight,-90, 90, 180, 0), 0, 180), domeSpeed, false);
+    #else
+//    int targetLeftPosition = constrain(map(ServoLeft, -90, 90, 0, 180), 0, 180) + 5;
+//    int targetRightPosition = constrain(map(ServoRight, -90, 90, 180, 0), 0, 180);  
+//    leftServo.write(targetLeftPosition, domeSpeed);
+//    rightServo.write(targetRightPosition, domeSpeed);
+      leftServo.write(constrain(map(ServoLeft, -90, 90, 0, 180), 0, 180) + 5, domeSpeed); 
+      rightServo.write(constrain(map(ServoRight, -90, 90, 180, 0), 0, 180), domeSpeed);
+    #endif
   }
+  #endif
+  #ifdef V2_Drive
+   void domeTilt(){
+    if (Fwd == 0 || Fwd == 2) {
+      Joy2XDirection = map(Joy2X, 0, 512, -MaxDomeTiltX, MaxDomeTiltX);
+      Joy2YDirection = map(Joy2Y, 0, 512, -MaxDomeTiltY, MaxDomeTiltY);
+    } else {
+      Joy2YDirection = map(Joy2Y, 0, 512, MaxDomeTiltY, -MaxDomeTiltY);
+      Joy2XDirection = map(Joy2X, 0, 512, MaxDomeTiltX, -MaxDomeTiltX);
+    }
+  
+    if (Joy2YDirection <= 1.7 && Joy2YDirection >= -1.7) {  
+      Joy2YDirection = 0;   
+    }
+  
+    if (Joy2XDirection <= 1.7 && Joy2XDirection >= -1.7) {  
+      Joy2XDirection = 0;   
+    }
+      
+    if (Setpoint3 >= 2 || Setpoint3 <= -2) {
+      Joy2YPitch = Joy2YDirection + pitch;
+    } else {
+      Joy2YPitch = Joy2YDirection - pitchOffset;
+    }
+  
+    if ((Joy2XDirection + DomeXEase) > Joy2XEase && (Joy2XDirection - DomeXEase) < Joy2XEase) {
+      Joy2XEase = Joy2XDirection;
+    } else if (Joy2XEase > Joy2XDirection) {
+      Joy2XEase -= DomeXEase;
+    } else if (Joy2XEase < Joy2XDirection) {
+      Joy2XEase += DomeXEase;
+    }
+  
+    if ((Joy2YPitch + DomeYEase) > Joy2YEase && (Joy2YPitch - DomeYEase) < Joy2YEase) {
+      Joy2YEase = Joy2YPitch;
+    } else if (Joy2YEase > Joy2YPitch) {
+      Joy2YEase -= DomeYEase;
+    } else if (Joy2YEase < Joy2YPitch) {
+      Joy2YEase += DomeYEase;
+    }
+  
+    Joy2XEaseMap = Joy2XEase;
+    Joy2YEaseMap = Joy2YEase;
+  
+    if (Joy2YEaseMap < 0) {
+      Joy2Ya = map(Joy2YEaseMap, -20, 0, 70, 0);
+      Joy2XLowOffset = map(Joy2Ya, 1, 70, -15, -50);
+      Joy2XHighOffset = map(Joy2Ya, 1, 70, 30, 20);
+    } else if (Joy2YEaseMap > 0) {
+      Joy2Ya = map(Joy2YEaseMap, 0, 24, 0, -80); 
+      Joy2XLowOffset = map(Joy2Ya, -1, -80, -15, 10);
+      Joy2XHighOffset = map(Joy2Ya, -1, -80, 30, 90);
+    } else {
+      Joy2Ya = 0;
+    }
+  
+    if (Joy2XEaseMap > 0) {
+      Joy2XLowOffsetA = map(Joy2XEaseMap, 0, 18, 0, Joy2XLowOffset);
+      Joy2XHighOffsetA = map(Joy2XEaseMap, 0, 18, 0, Joy2XHighOffset);
+      ServoLeft = Joy2Ya + Joy2XHighOffsetA;
+      ServoRight = Joy2Ya + Joy2XLowOffsetA;
+    } else if (Joy2XEaseMap < 0) {
+      Joy2XLowOffsetA = map(Joy2XEaseMap, -18, 0, Joy2XLowOffset, 0);
+      Joy2XHighOffsetA = map(Joy2XEaseMap, -18, 0, Joy2XHighOffset, 0);
+      ServoRight = Joy2Ya + Joy2XHighOffsetA;
+      ServoLeft = Joy2Ya + Joy2XLowOffsetA;
+    } else {
+      Joy2XHighOffsetA = 0;
+      Joy2XLowOffsetA = 0; 
+      ServoRight = Joy2Ya;
+      ServoLeft = Joy2Ya;
+    }
+  
+    leftServo.setSpeed(domeSpeed); 
+    rightServo.setSpeed(domeSpeed);
+
+    if (leftServo.isInGoal()) {
+      leftServo.setGoalAngle(constrain(map(ServoLeft, -90, 90, 0, 180), 0, 180) + 5);
+    }
+    if (rightServo.isInGoal()) {
+      rightServo.setGoalAngle(constrain(map(ServoRight, -90, 90, 180, 0), 0, 180));
+    }
+
+    leftServo.doStep();
+    rightServo.doStep();
+    }
   #endif
   
 
 /*
  ****************************************************************************************** Dome Spin ********************************************************************************
  */
+ #ifdef V2_Drive
+  void hallSensorISR() {
+  if (digitalRead(hallEffectSensor_Pin) == HIGH) {
+    ticks++;
+  } else {
+      ticks--;
+    }
+  }
+
+  int ticksToPosition(int ticks) {
+    int position = (ticks % maxTicks) - ticksPerRotation; // Calculate the position based on ticks
+    return position;
+  }
+  #endif
   
   void domeSpin() {
   
@@ -695,14 +803,20 @@
   #ifdef reverseDomeSpin
     #ifdef MK2_Dome
       domeRotation = map(recFromRemote.Joy2X, 0,512,-255,255);
-    #else
+    #endif
+    #ifndef V2_Drive
       domeRotation = map(recFromRemote.Joy4X, 0,512,-255,255);
+    #else
+      domeRotation = map(Joy2X, 0,512,-255,255);
     #endif
   #else
     #ifdef MK2_Dome
       domeRotation = map(recFromRemote.Joy2X, 0,512,255,-255);
-    #else
+    #endif
+    #ifndef V2_Drive
       domeRotation = map(recFromRemote.Joy4X, 0,512,255,-255);
+    #else
+      domeRotation = map(Joy2X, 0,512,255,-255);
     #endif
   #endif
          
@@ -729,9 +843,9 @@
           analogWrite(domeSpinPWM2, 0);
           analogWrite(domeSpinPWM1, abs(currentDomeSpeed));
         #else
-          analogWrite(domeMotor_pin_A,LOW);
-          analogWrite(domeMotor_pin_B,HIGH); 
-          analogWrite(domeMotor_pwm,abs(currentDomeSpeed));
+          digitalWrite(domeMotor_pin_A,LOW);
+          digitalWrite(domeMotor_pin_B,HIGH); 
+          digitalWrite(domeMotor_pwm,abs(currentDomeSpeed));
         #endif
       }else if ((currentDomeSpeed>=20) && (ControllerStatus == 0 && IMUStatus == 0)){
         currentDomeSpeed = constrain(currentDomeSpeed,-255,255);
@@ -739,150 +853,253 @@
           analogWrite(domeSpinPWM1, 0);
           analogWrite(domeSpinPWM2, abs(currentDomeSpeed));
         #else
-          analogWrite(domeMotor_pin_A,HIGH);
-          analogWrite(domeMotor_pin_B,LOW); 
-          analogWrite(domeMotor_pwm,abs(currentDomeSpeed));
+          digitalWrite(domeMotor_pin_A,HIGH);
+          digitalWrite(domeMotor_pin_B,LOW); 
+          digitalWrite(domeMotor_pwm,abs(currentDomeSpeed));
         #endif
       }else {
         #ifndef V2_Drive
           analogWrite(domeSpinPWM1, 0);
           analogWrite(domeSpinPWM2, 0);
         #else
-          analogWrite(domeMotor_pin_A,LOW);
-          analogWrite(domeMotor_pin_B,HIGH); 
-          analogWrite(domeMotor_pwm,abs(0));
+          digitalWrite(domeMotor_pin_A,LOW);
+          digitalWrite(domeMotor_pin_B,HIGH); 
+          digitalWrite(domeMotor_pwm,abs(0));
         #endif
       }   
     }
-  
-  void domeSpinServo() {
+
+    void domeSpinServo() {
+      #ifndef reverseDomeSpinServo
+        #ifdef MK2_Dome
+            ch4Servo = map(recFromRemote.Joy2X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+        #else
+          #ifndef V2_Drive
+            ch4Servo = map(recFromRemote.Joy4X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+          #else
+            ch4Servo = map(Joy2X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+          #endif
+        #endif
+      #else
+        #ifndef V2_Drive
+            ch4Servo = map(recFromRemote.Joy4X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
+        #else
+            ch4Servo = map(Joy2X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
+        #endif
+      #endif
       
-  #ifndef reverseDomeSpinServo
-      #ifdef MK2_Dome
+      #ifdef reverseDomeSpinPot
         #ifndef V2_Drive
-          ch4Servo = map(recFromRemote.Joy2X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+          if(recFromRemote.Fwd == 1 || recFromRemote.Fwd == 2){
+            Input5 = ((map(analogRead(domeSpinPot), 0, 1023, -180, 180) + domeSpinOffset) - 180);
+          } else {
+            Input5 = map(analogRead(domeSpinPot), 0, 1023, -180, 180) + domeSpinOffset;
+          }
         #else
-          ch4Servo = map(Joy2X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+          encoderValue = domeSpinEnc.getCount();
+          Input5 = map(encoderValue, 0, ticksPerRotation / 2, -180, 180) + domeSpinOffset;
+          if (Fwd == 1 || Fwd == 2) {
+            Input5 -= 180;
+          }
         #endif
       #else
         #ifndef V2_Drive
-          ch4Servo = map(Joy4X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+          if(recFromRemote.Fwd == 1 || recFromRemote.Fwd == 2){
+            Input5 = ((map(analogRead(domeSpinPot), 0, 1023, 180, -180) + domeSpinOffset) - 180);
+          } else {
+            Input5 = map(analogRead(domeSpinPot), 0, 1023, 180, -180) + domeSpinOffset;
+          }
         #else
-          ch4Servo = map(Joy4X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
-        #endif
-        
-      #endif
-  #else
-      #ifdef MK2_Dome
-        #ifndef V2_Drive
-          ch4Servo = map(recFromRemote.Joy2X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
-        #else
-          ch4Servo = map(Joy2X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
-        #endif
-      #else
-        #ifndef V2_Drive
-          ch4Servo = map(recFromRemote.Joy4X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
-        #else
-          ch4Servo = map(Joy4X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
+          encoderValue = domeSpinEnc.getCount();
+          Input5 = map(encoderValue, 0, ticksPerRotation / 2, 180, -180) + domeSpinOffset;
+          if (Fwd == 1 || Fwd == 2) {
+            Input5 -= 180;
+          }
         #endif
       #endif
-  #endif
-  
-  #ifdef reverseDomeSpinPot
-      #ifndef V2_Drive
-        if(recFromRemote.Fwd == 1 || recFromRemote.Fwd == 2){
-          Input5 = ((map(analogRead(domeSpinPot),0, 1023, -180, 180) + domeSpinOffset)-180);
-        }else {
-          Input5 = map(analogRead(domeSpinPot),0, 1023, -180, 180) + domeSpinOffset;
-        }
-      #else
-//        encoderValue = domeSpinEnc.read(); // Read the encoder value
-//        Input5 = map(encoderValue, 0, 420, -180, 180) + domeSpinOffset;
-//        if (Fwd == 1 || Fwd == 2) {
-//          Input5 -= 180;
-//        }
-        encoderValue = encoder.getCount();
-        Input5 = map(encoderValue, 0, 420, -180, 180) + domeSpinOffset;
-        if (Fwd == 1 || Fwd == 2) {
-          Input5 -= 180;
-        }
-      #endif
-  #else
-    #ifndef V2_Drive
-      if(recFromRemote.Fwd == 1 || recFromRemote.Fwd == 2){
-        Input5 = ((map(analogRead(domeSpinPot),0, 1023, 180, -180) + domeSpinOffset)-180);
-      }else {
-        Input5 = map(analogRead(domeSpinPot),0, 1023, 180, -180) + domeSpinOffset;
-      }
-    #else
-//      encoderValue = domeSpinEnc.read(); // Read the encoder value
-//      Input5 = map(encoderValue, 0, 420, 180, -180) + domeSpinOffset;
-//      if (Fwd == 1 || Fwd == 2) {
-//        Input5 -= 180;
-//      }
-        encoderValue = encoder.getCount();
-        Input5 = map(encoderValue, 0, 420, 180, -180) + domeSpinOffset;
-        if (Fwd == 1 || Fwd == 2) {
-          Input5 -= 180;
-        }
-    #endif
-  #endif
-  
-      if (Input5 < -180){
+      
+      if (Input5 < -180) {
         Input5 += 360;
-      } else if (Input5 > 180){
+      } else if (Input5 > 180) {
         Input5 -= 360;
       } else {
         Input5 = Input5;
       }
-  
-  
-    if ((Setpoint5 > -5) && (Setpoint5 < 5) && (ch4Servo == 0)){
-      Setpoint5 = 0;
-    }else if ((ch4Servo > (Setpoint5 + 2)) && (ch4Servo != Setpoint5)){
-      Setpoint5+=5;  
-    }else if ((ch4Servo < (Setpoint5 -2)) && (ch4Servo != Setpoint5)){
-      Setpoint5-=5;
+      
+      if ((Setpoint5 > -5) && (Setpoint5 < 5) && (ch4Servo == 0)) {
+        Setpoint5 = 0;
+      } else if ((ch4Servo > (Setpoint5 + 2)) && (ch4Servo != Setpoint5)) {
+        Setpoint5 += 5;  
+      } else if ((ch4Servo < (Setpoint5 - 2)) && (ch4Servo != Setpoint5)) {
+        Setpoint5 -= 5;
+      }
+      constrain(Setpoint5, -domeServoModeAngle, domeServoModeAngle);
+      
+      PID5.Compute();
+      
+      if (Output5 < -4) {
+        Output5a = constrain(abs(Output5), 0, 255);
+        #ifndef V2_Drive
+          analogWrite(domeSpinPWM1, Output5a);     
+          analogWrite(domeSpinPWM2, 0);
+        #else
+          digitalWrite(domeMotor_pin_A, HIGH);
+          digitalWrite(domeMotor_pin_B, LOW); 
+          digitalWrite(domeMotor_pwm, abs(Output5a));
+        #endif
+      } else if (Output5 > 4) { 
+        Output5a = constrain(abs(Output5), 0, 255);
+        #ifndef V2_Drive
+          analogWrite(domeSpinPWM2, Output5a);  
+          analogWrite(domeSpinPWM1, 0);
+        #else
+          digitalWrite(domeMotor_pin_A, LOW);
+          digitalWrite(domeMotor_pin_B, HIGH); 
+          digitalWrite(domeMotor_pwm, abs(Output5a));
+        #endif
+      } else {
+        #ifndef V2_Drive
+          analogWrite(domeSpinPWM2, 0);  
+          analogWrite(domeSpinPWM1, 0);
+        #else
+          digitalWrite(domeMotor_pin_A, LOW);
+          digitalWrite(domeMotor_pin_B, LOW); 
+          digitalWrite(domeMotor_pwm, 0);
+        #endif
+      }
     }
-    constrain(Setpoint5, -domeServoModeAngle, domeServoModeAngle);
-      
-    PID5.Compute();
   
-  
-          
-    if (Output5 < -4){
-      Output5a = constrain(abs(Output5),0, 255);
-      #ifndef V2_Drive
-        analogWrite(domeSpinPWM1, Output5a);     
-        analogWrite(domeSpinPWM2, 0);
-      #else
-        analogWrite(domeMotor_pin_A,HIGH);
-        analogWrite(domeMotor_pin_B,LOW); 
-        analogWrite(domeMotor_pwm,abs(Output5a));
-      #endif
-      
-    }else if (Output5 > 4){ 
-      Output5a = constrain(abs(Output5), 0, 255);
-      #ifndef V2_Drive
-        analogWrite(domeSpinPWM2, Output5a);  
-        analogWrite(domeSpinPWM1, 0);
-      #else
-        analogWrite(domeMotor_pin_A,LOW);
-        analogWrite(domeMotor_pin_B,HIGH); 
-        analogWrite(domeMotor_pwm,abs(Output5a));
-      #endif
-    }else{
-      #ifndef V2_Drive
-        analogWrite(domeSpinPWM2, 0);  
-        analogWrite(domeSpinPWM1, 0);
-      #else
-        analogWrite(domeMotor_pin_A,LOW);
-        analogWrite(domeMotor_pin_B,LOW); 
-        analogWrite(domeMotor_pwm,0);
-      #endif
-    }
-      
-  }
+//  void domeSpinServo() {
+//      
+//  #ifndef reverseDomeSpinServo
+//      #ifdef MK2_Dome
+//        #ifndef V2_Drive
+//          ch4Servo = map(recFromRemote.Joy2X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+//        #endif
+//        #ifndef V2_Drive
+//          ch4Servo = map(recFromRemote.Joy4X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+//        #else
+//          ch4Servo = map(Joy2X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+//        #endif
+//      #else
+//        #ifndef V2_Drive
+//          ch4Servo = map(recFromRemote.Joy4X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+//        #else
+//          ch4Servo = map(Joy2X, 0, 512, domeServoModeAngle, -domeServoModeAngle);
+//        #endif
+//        
+//      #endif
+//  #else
+//      #ifdef MK2_Dome
+//        #ifndef V2_Drive
+//          ch4Servo = map(recFromRemote.Joy2X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
+//        #else
+//          ch4Servo = map(Joy2X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
+//        #endif
+//      #else
+//        #ifndef V2_Drive
+//          ch4Servo = map(recFromRemote.Joy4X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
+//        #else
+//          ch4Servo = map(Joy2X, 0, 512, -domeServoModeAngle, domeServoModeAngle);
+//        #endif
+//      #endif
+//  #endif
+//  
+//  #ifdef reverseDomeSpinPot
+//      #ifndef V2_Drive
+//        if(recFromRemote.Fwd == 1 || recFromRemote.Fwd == 2){
+//          Input5 = ((map(analogRead(domeSpinPot),0, 1023, -180, 180) + domeSpinOffset)-180);
+//        }else {
+//          Input5 = map(analogRead(domeSpinPot),0, 1023, -180, 180) + domeSpinOffset;
+//        }
+//      #else
+////        encoderValue = domeSpinEnc.read(); // Read the encoder value
+////        Input5 = map(encoderValue, 0, 420, -180, 180) + domeSpinOffset;
+////        if (Fwd == 1 || Fwd == 2) {
+////          Input5 -= 180;
+////        }
+//        encoderValue = encoder.getCount();
+//        Input5 = map(encoderValue, 0, 420, -180, 180) + domeSpinOffset;
+//        if (Fwd == 1 || Fwd == 2) {
+//          Input5 -= 180;
+//        }
+//      #endif
+//  #else
+//    #ifndef V2_Drive
+//      if(recFromRemote.Fwd == 1 || recFromRemote.Fwd == 2){
+//        Input5 = ((map(analogRead(domeSpinPot),0, 1023, 180, -180) + domeSpinOffset)-180);
+//      }else {
+//        Input5 = map(analogRead(domeSpinPot),0, 1023, 180, -180) + domeSpinOffset;
+//      }
+//    #else
+////      encoderValue = domeSpinEnc.read(); // Read the encoder value
+////      Input5 = map(encoderValue, 0, 420, 180, -180) + domeSpinOffset;
+////      if (Fwd == 1 || Fwd == 2) {
+////        Input5 -= 180;
+////      }
+////        encoderValue = encoder.getCount();
+////        Input5 = map(encoderValue, 0, 420, 180, -180) + domeSpinOffset;
+////        if (Fwd == 1 || Fwd == 2) {
+////          Input5 -= 180;
+////        }
+//    #endif
+//  #endif
+//  
+//      if (Input5 < -180){
+//        Input5 += 360;
+//      } else if (Input5 > 180){
+//        Input5 -= 360;
+//      } else {
+//        Input5 = Input5;
+//      }
+//  
+//  
+//    if ((Setpoint5 > -5) && (Setpoint5 < 5) && (ch4Servo == 0)){
+//      Setpoint5 = 0;
+//    }else if ((ch4Servo > (Setpoint5 + 2)) && (ch4Servo != Setpoint5)){
+//      Setpoint5+=5;  
+//    }else if ((ch4Servo < (Setpoint5 -2)) && (ch4Servo != Setpoint5)){
+//      Setpoint5-=5;
+//    }
+//    constrain(Setpoint5, -domeServoModeAngle, domeServoModeAngle);
+//      
+//    PID5.Compute();
+//  
+//  
+//          
+//    if (Output5 < -4){
+//      Output5a = constrain(abs(Output5),0, 255);
+//      #ifndef V2_Drive
+//        analogWrite(domeSpinPWM1, Output5a);     
+//        analogWrite(domeSpinPWM2, 0);
+//      #else
+//        analogWrite(domeMotor_pin_A,HIGH);
+//        analogWrite(domeMotor_pin_B,LOW); 
+//        analogWrite(domeMotor_pwm,abs(Output5a));
+//      #endif
+//      
+//    }else if (Output5 > 4){ 
+//      Output5a = constrain(abs(Output5), 0, 255);
+//      #ifndef V2_Drive
+//        analogWrite(domeSpinPWM2, Output5a);  
+//        analogWrite(domeSpinPWM1, 0);
+//      #else
+//        analogWrite(domeMotor_pin_A,LOW);
+//        analogWrite(domeMotor_pin_B,HIGH); 
+//        analogWrite(domeMotor_pwm,abs(Output5a));
+//      #endif
+//    }else{
+//      #ifndef V2_Drive
+//        analogWrite(domeSpinPWM2, 0);  
+//        analogWrite(domeSpinPWM1, 0);
+//      #else
+//        analogWrite(domeMotor_pin_A,LOW);
+//        analogWrite(domeMotor_pin_B,LOW); 
+//        analogWrite(domeMotor_pwm,0);
+//      #endif
+//    }
+//      
+//  }
   
   
   
@@ -949,19 +1166,19 @@
       }
     #else
       if ((flywheelRotation < -10) && (ControllerStatus == 0 && IMUStatus == 0) && (motorEnable == 0)){
-        analogWrite(flyWheelMotor_pin_A,HIGH);
-        analogWrite(flyWheelMotor_pin_B,LOW); 
-        analogWrite(flyWheelMotor_pwm, abs(flywheelRotation));
+        digitalWrite(flyWheelMotor_pin_A,HIGH);
+        digitalWrite(flyWheelMotor_pin_B,LOW); 
+        digitalWrite(flyWheelMotor_pwm, abs(flywheelRotation));
       }
       else if ((flywheelRotation > 10) && (ControllerStatus == 0 && IMUStatus == 0) && (motorEnable == 0)){
-        analogWrite(flyWheelMotor_pin_A,LOW);
-        analogWrite(flyWheelMotor_pin_B,HIGH); 
-        analogWrite(flyWheelMotor_pwm, abs(flywheelRotation));
+        digitalWrite(flyWheelMotor_pin_A,LOW);
+        digitalWrite(flyWheelMotor_pin_B,HIGH); 
+        digitalWrite(flyWheelMotor_pwm, abs(flywheelRotation));
       }
       else {
-        analogWrite(flyWheelMotor_pin_A, LOW);
-        analogWrite(flyWheelMotor_pin_B, LOW);
-        analogWrite(flyWheelMotor_pwm, 0);
+        digitalWrite(flyWheelMotor_pin_A, LOW);
+        digitalWrite(flyWheelMotor_pin_B, LOW);
+        digitalWrite(flyWheelMotor_pwm, 0);
       }
     #endif
     
@@ -1053,14 +1270,14 @@
         } else if(joystickDrive < -2 || joystickDrive > 2 || joystickS2S < -2 || joystickS2S > 2 || joystickDome < -2 || joystickDome > 2 || flywheelRotation > 30 || flywheelRotation < -30 || Joy2X > 276 || Joy2X < 236 || (lastDirection != lJoySelect)){
     
           autoDisableState = 0;     
-          analogWrite(flyWheelMotor_pin_A, LOW);
-          analogWrite(flyWheelMotor_pin_B, LOW);
-          analogWrite(domeMotor_pin_A, LOW);
-          analogWrite(domeMotor_pin_B, LOW);
-          analogWrite(Drive_pin_1, LOW);
-          analogWrite(Drive_pin_2, LOW);
-          analogWrite(S2S_pin_1, LOW);
-          analogWrite(S2S_pin_2, LOW);
+          digitalWrite(flyWheelMotor_pin_A, LOW);
+          digitalWrite(flyWheelMotor_pin_B, LOW);
+          digitalWrite(domeMotor_pin_A, LOW);
+          digitalWrite(domeMotor_pin_B, LOW);
+          digitalWrite(Drive_pin_1, LOW);
+          digitalWrite(Drive_pin_2, LOW);
+          digitalWrite(S2S_pin_1, LOW);
+          digitalWrite(S2S_pin_2, LOW);
           autoDisableDoubleCheck = 0; 
           autoDisable = 0;
           if(lJoySelect != lastDirection){
@@ -1071,14 +1288,14 @@
         }
                 
         if(autoDisableState == 1 && (millis() - autoDisableMotorsMillis >= 3000) && Output1a < 25 && Output3a < 8){
-          analogWrite(flyWheelMotor_pin_A, LOW);
-          analogWrite(flyWheelMotor_pin_B, LOW);
-          analogWrite(domeMotor_pin_A, LOW);
-          analogWrite(domeMotor_pin_B, LOW);
-          analogWrite(Drive_pin_1, LOW);
-          analogWrite(Drive_pin_2, LOW);
-          analogWrite(S2S_pin_1, LOW);
-          analogWrite(S2S_pin_2, LOW);
+          digitalWrite(flyWheelMotor_pin_A, LOW);
+          digitalWrite(flyWheelMotor_pin_B, LOW);
+          digitalWrite(domeMotor_pin_A, LOW);
+          digitalWrite(domeMotor_pin_B, LOW);
+          digitalWrite(Drive_pin_1, LOW);
+          digitalWrite(Drive_pin_2, LOW);
+          digitalWrite(S2S_pin_1, LOW);
+          digitalWrite(S2S_pin_2, LOW);
           
           autoDisable = 1;
             
@@ -1101,29 +1318,29 @@
         } 
         
       }else if(CalibID == 2){ //drive and dome tilt
-          analogWrite(flyWheelMotor_pin_A, LOW);
-          analogWrite(flyWheelMotor_pin_B, LOW);
-          analogWrite(domeMotor_pin_A, LOW);
-          analogWrite(domeMotor_pin_B, LOW);
-          analogWrite(S2S_pin_1, LOW);
-          analogWrite(S2S_pin_2, LOW);
+          digitalWrite(flyWheelMotor_pin_A, LOW);
+          digitalWrite(flyWheelMotor_pin_B, LOW);
+          digitalWrite(domeMotor_pin_A, LOW);
+          digitalWrite(domeMotor_pin_B, LOW);
+          digitalWrite(S2S_pin_1, LOW);
+          digitalWrite(S2S_pin_2, LOW);
       
       }else if(CalibID == 3){//S2S
-          analogWrite(flyWheelMotor_pin_A, LOW);
-          analogWrite(flyWheelMotor_pin_B, LOW);
-          analogWrite(domeMotor_pin_A, LOW);
-          analogWrite(domeMotor_pin_B, LOW);
-          analogWrite(Drive_pin_1, LOW);
-          analogWrite(Drive_pin_2, LOW);
+          digitalWrite(flyWheelMotor_pin_A, LOW);
+          digitalWrite(flyWheelMotor_pin_B, LOW);
+          digitalWrite(domeMotor_pin_A, LOW);
+          digitalWrite(domeMotor_pin_B, LOW);
+          digitalWrite(Drive_pin_1, LOW);
+          digitalWrite(Drive_pin_2, LOW);
       }else if(CalibID == 4){
-        analogWrite(flyWheelMotor_pin_A, LOW);
-          analogWrite(flyWheelMotor_pin_B, LOW);
-          analogWrite(domeMotor_pin_A, LOW);
-          analogWrite(domeMotor_pin_B, LOW);
-          analogWrite(Drive_pin_1, LOW);
-          analogWrite(Drive_pin_2, LOW);
-          analogWrite(S2S_pin_1, LOW);
-          analogWrite(S2S_pin_2, LOW);
+          digitalWrite(flyWheelMotor_pin_A, LOW);
+          digitalWrite(flyWheelMotor_pin_B, LOW);
+          digitalWrite(domeMotor_pin_A, LOW);
+          digitalWrite(domeMotor_pin_B, LOW);
+          digitalWrite(Drive_pin_1, LOW);
+          digitalWrite(Drive_pin_2, LOW);
+          digitalWrite(S2S_pin_1, LOW);
+          digitalWrite(S2S_pin_2, LOW);
       }
     #endif
   }
@@ -1252,14 +1469,14 @@
         analogWrite(domeSpinPWM1, 0);
       }
     #else
-      analogWrite(flyWheelMotor_pin_A, LOW);
-      analogWrite(flyWheelMotor_pin_B, LOW);
-      analogWrite(domeMotor_pin_A, LOW);
-      analogWrite(domeMotor_pin_B, LOW);
-      analogWrite(Drive_pin_1, LOW);
-      analogWrite(Drive_pin_2, LOW);
-      analogWrite(S2S_pin_1, LOW);
-      analogWrite(S2S_pin_2, LOW);
+      digitalWrite(flyWheelMotor_pin_A, LOW);
+      digitalWrite(flyWheelMotor_pin_B, LOW);
+      digitalWrite(domeMotor_pin_A, LOW);
+      digitalWrite(domeMotor_pin_B, LOW);
+      digitalWrite(Drive_pin_1, LOW);
+      digitalWrite(Drive_pin_2, LOW);
+      digitalWrite(S2S_pin_1, LOW);
+      digitalWrite(S2S_pin_2, LOW);
     #endif
   }
 
@@ -1275,25 +1492,42 @@
  * ====================================================================================================================================================================================
  */ 
   
+//  void setDomeSpinOffset() {
+//    #ifndef V2_Drive
+//      if(recFromRemote.Fwd == 0 || recFromRemote.Fwd == 2){
+//        domeSpinOffset = 0 - map(analogRead(domeSpinPot),0, 1023, 180, -180);
+//      }else{
+//        domeSpinOffset = 180 - map(analogRead(domeSpinPot),0, 1023, 180, -180);
+//      }
+//      EEPROM.writeInt(12,domeSpinOffset); 
+//    #else
+//        encoderValue = encoder.getCount();
+//        if(Fwd == 0 || Fwd == 2){
+//          domeSpinOffset = 0 - map(encoderValue, 0, 420, 180, -180);
+//        }else{
+//          domeSpinOffset = 180 - map(encoderValue, 0, 420, 180, -180);
+//        }
+//        preferences.putInt("domeSpinOffset", domeSpinOffset);
+//    #endif
+//  }
   void setDomeSpinOffset() {
     #ifndef V2_Drive
-      if(recFromRemote.Fwd == 0 || recFromRemote.Fwd == 2){
-        domeSpinOffset = 0 - map(analogRead(domeSpinPot),0, 1023, 180, -180);
-      }else{
-        domeSpinOffset = 180 - map(analogRead(domeSpinPot),0, 1023, 180, -180);
+      if (recFromRemote.Fwd == 0 || recFromRemote.Fwd == 2) {
+        domeSpinOffset = 0 - map(analogRead(domeSpinPot), 0, 1023, 180, -180);
+      } else {
+        domeSpinOffset = 180 - map(analogRead(domeSpinPot), 0, 1023, 180, -180);
       }
-      EEPROM.writeInt(12,domeSpinOffset); 
+      EEPROM.writeInt(12, domeSpinOffset); 
     #else
-        encoderValue = encoder.getCount();
-        if(Fwd == 0 || Fwd == 2){
-          domeSpinOffset = 0 - map(encoderValue, 0, 420, 180, -180);
-        }else{
-          domeSpinOffset = 180 - map(encoderValue, 0, 420, 180, -180);
-        }
-        preferences.putInt("domeSpinOffset", domeSpinOffset);
+      encoderValue = domeSpinEnc.getCount();
+      if (Fwd == 0 || Fwd == 2) {
+        domeSpinOffset = 0 - map(encoderValue, 0, ticksPerRotation / 2, 180, -180);
+      } else {
+        domeSpinOffset = 180 - map(encoderValue, 0, ticksPerRotation / 2, 180, -180);
+      }
+      preferences.putInt("domeSpinOffset", domeSpinOffset);
     #endif
   }
-  
   
   void setPitchOffset(){
     #ifndef V2_Drive
@@ -1688,9 +1922,8 @@
   /* 
    *  ESPNOW Callback when data is sent
   */
-  #ifdef V2_Drive
+
     void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-      #ifdef debugESPNOWSend
         Serial.print("\r\nLast Packet Send Status:\t");
         Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
         if (status ==0){
@@ -1699,7 +1932,6 @@
         else{
           success = "Delivery Fail :(";
         }
-      #endif
     }
     
     /* 
@@ -1740,8 +1972,7 @@
         }
       #endif
     }
-  #endif
-  
+
   
  /*====================================================================================================================================================================================
  * ====================================================================================================================================================================================
