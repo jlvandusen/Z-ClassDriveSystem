@@ -30,7 +30,7 @@
 // #define printRemote
 // #define debugVS
 // #define debugPSI
-// #define printServoPositions
+// #define debugServoPositions
 // #define printPitchAndRoll
 // #define debugServos
 // #define debugDOME
@@ -55,7 +55,7 @@
 // #define MP3Zio // Enable qwiic/i2c communications to MP3 trigger for Zio
 // #define MP3VS105 // Enable serial communications to MP3 trigger for Adafruit VS1053 https://www.adafruit.com/product/1381
 
-#define useHallSensor  // Allow use of hall monitor installed to set forward direction of the dome otherwise set via Pref save on Controllers
+#define useHallSensor 1  // Allow use of hall monitor installed to set forward direction of the dome otherwise set via Pref save on Controllers
 // #define EnableFilters // Providing filtering against raw data reads from ESP32 over serial UNDER_CONSTRUCTION
 // #define UseNEO // If not using RX capabilities from DFplayer can use for NEO Pixel controls of body UNDER_CONSTRUCTION
 // #define checksumValidation
@@ -89,7 +89,12 @@
 
 #define leftServoOffset -7
 #define rightServoOffset 0
-#define dome_pitch_modifier 1.5
+#define dome_pitch_modifier 1.5 // Amplifies the response, making the dome tilt adjustments more drastic. You can tweak this multiplier HIGHER for a more aggressive correction
+#define dome_pitch_threshold 5 //Introduced a check if ie. (receiveFromESP32Data.pitch <= -5 || receiveFromESP32Data.pitch >= 5) to ensure even minor pitch deviations trigger corrections.
+#define dome_roll_modifier 1.5 // Amplifies the response, making the dome tilt adjustments more drastic. You can tweak this multiplier HIGHER for a more aggressive correction
+#define dome_roll_threshold 5 //Introduced a check if ie. (receiveFromESP32Data.pitch <= -5 || receiveFromESP32Data.pitch >= 5) to ensure even minor pitch deviations trigger corrections.
+#define domeMotorDeadzone 5
+#define dome_PWM_speed 100 //defining a constant for the default PWM speed to avoid hardcoding 
 
 #define PIN_MP3_TX 5  // Connects to 32u4's 5 for use with DFplayer
 #define PIN_MP3_RX 13  // Connects to 32u4's A4 22 or 13 (NEO) for use with DFplayer
@@ -178,6 +183,14 @@ double rightServoPosition = rightServo_0_Position;
 double leftDifference, leftOldPosition = leftServo_0_Position, rightDifference, rightOldPosition = rightServo_0_Position;
 double domeTiltAngle_X_Axis, domeTiltAngle_Y_Axis, leftStickY, leftStickX, encPos, batt_Voltage;
 
+//int y_Axis = receiveFromESP32Data.leftStickY;
+//int x_Axis = receiveFromESP32Data.leftStickX;
+//int domeTiltAngle_Y_Axis = 0; // Or initialize as needed
+//int domeTiltAngle_X_Axis = 0; // Or initialize as needed
+const int LEFT_SERVO_MIN = leftServo_0_Position - 45;
+const int LEFT_SERVO_MAX = leftServo_0_Position + 55;
+const int RIGHT_SERVO_MIN = rightServo_0_Position - 55;
+const int RIGHT_SERVO_MAX = rightServo_0_Position + 45;
 
 // int Joy2Ya, Joy2XLowOffset, Joy2XHighOffset, Joy2XLowOffsetA, Joy2XHighOffsetA, ServoLeft, ServoRight;
 // double Joy2X, Joy2Y, LeftJoy2X, LeftJoy2Y, Joy2XEase, Joy2YEase,  Joy2XEaseMap;
@@ -327,7 +340,8 @@ void setup() {
     domeCenterSet = true; 
     myEnc.write(0); //740
   #else
-    setDomeCenter();
+    // Align the dome to the forward position
+    alignToForwardPosition();
   #endif 
 }
 
@@ -335,12 +349,8 @@ void loop() {
   Timechecks();
   SendRecieveData();
   if (enableDrive) {
-//    encoder();
     Servos();
     spinStuff();
-//    if(!domeCenterSet){
-//      setDomeCenter(); 
-//    }
   }
 
   Timechecks();
