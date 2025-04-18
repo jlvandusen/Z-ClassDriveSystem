@@ -1,0 +1,5 @@
+{
+  "sketch": "32u4_Secondary_v8_3.ino",
+  "board": "arduino:avr:leonardo",
+  "port": "COM3"
+}
