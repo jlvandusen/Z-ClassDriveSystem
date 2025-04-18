@@ -64,10 +64,17 @@ void applyReverseLogic(int &y_Axis, int &x_Axis, int &tiltY, int &tiltX) {
     }
 }
 
+// Apply reverse logic at the global scope
+void applyReverseLogic(double &y_Axis, double &x_Axis, double &tiltY, double &tiltX) {
+    y_Axis *= -1;
+    x_Axis *= -1;
+    tiltY *= -1;
+    tiltX *= -1;
+}
 
 void Servos(){
   int domeTurnPercent;
-  int y_Axis, x_Axis;
+  int8_t y_Axis, x_Axis;
   const int LEFT_SERVO_MIN = leftServo_0_Position - 45;
   const int LEFT_SERVO_MAX = leftServo_0_Position + 55;
   const int RIGHT_SERVO_MIN = rightServo_0_Position - 55;
@@ -78,10 +85,6 @@ void Servos(){
     x_Axis = receiveFromESP32Data.leftStickX;
     y_Axis = receiveFromESP32Data.leftStickY;
 
-    // Apply reverse logic
-    if (reverseDrive) {
-        applyReverseLogic(y_Axis, x_Axis, domeTiltAngle_Y_Axis, domeTiltAngle_X_Axis);
-    }
 
     // Map joystick values to dome tilt angles
     leftStickY = mapJoystickToAngle(y_Axis, domeTiltYAxis_MaxAngle);
