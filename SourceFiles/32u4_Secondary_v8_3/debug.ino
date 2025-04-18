@@ -134,9 +134,26 @@ void debugRoutines(){
     Serial.println(constrain(leftOldPosition,leftServo_0_Position-45,leftServo_0_Position+55));
   #endif
 
-  #ifdef printServoPositions
-    Serial.print(leftServoPosition); 
-    Serial.println("\t");Serial.println(rightServoPosition);  
+  #ifdef debugServoPositions
+//    Serial.print("Left Servo Position: "); Serial.print(leftServoPosition);
+//    Serial.print(" Right Servo Position: "); Serial.println(rightServoPosition);
+    char formattedValue[8]; // Buffer to hold formatted output (7 characters + null terminator)
+    
+    Serial.print("Left Servo: ");
+    dtostrf(leftServoPosition, 7, 3, formattedValue); // Format: 7 characters wide, 3 decimal places
+    Serial.print(formattedValue);
+    
+    Serial.print(" Right Servo: ");
+    dtostrf(rightServoPosition, 7, 3, formattedValue);
+    Serial.print(formattedValue);
+    
+    Serial.print(" Pitch: ");
+    dtostrf(receiveFromESP32Data.pitch, 7, 3, formattedValue);
+    Serial.print(formattedValue);
+    
+    Serial.print(" Roll: ");
+    dtostrf(receiveFromESP32Data.roll, 7, 3, formattedValue);
+    Serial.println(formattedValue);
   #endif
 
   #ifdef debugServos
