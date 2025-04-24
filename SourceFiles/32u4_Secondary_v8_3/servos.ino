@@ -1,112 +1,72 @@
+void Servos() {
+    double y_Axis, x_Axis; // Use double for consistency
+    const int SERVO_MIN_OFFSET = 90; // Safe operational range
+    const int SERVO_MAX_OFFSET = 90;
+    const float DEADZONE_THRESHOLD = 0.5;  // Base deadzone for minor fluctuations
+    const float IMU_THRESHOLD = 1.5;      // Threshold to determine IMU-driven correction activation
+    const float SOFT_RETURN_FACTOR = 0.3;  // Weak correction force to return to center
 
-int mapJoystickToAngle(int axisValue, int maxAngle) {
-    // Maps joystick input (-127 to 127) to dome tilt angle range (-maxAngle to maxAngle)
-    return map(axisValue, -127, 127, -maxAngle, maxAngle);
-}
+    if (enableDrive) {
+        double joystickPitch = map(receiveFromESP32Data.leftStickX, -127, 127, -domeTiltYAxis_MaxAngle, domeTiltYAxis_MaxAngle); // forward/backward
+        double joystickRoll = map(receiveFromESP32Data.leftStickY, 127, -127, domeTiltXAxis_MaxAngle, -domeTiltXAxis_MaxAngle);  // left/right
 
-int easeAngle(int currentAngle, int targetAngle, int easeStep) {
-    if (targetAngle < currentAngle - easeStep) {
-        return currentAngle - easeStep;
-    } else if (targetAngle > currentAngle + easeStep) {
-        return currentAngle + easeStep;
+        // Detect if joystick is active (above deadzone)
+        bool joystickActive = abs(receiveFromESP32Data.leftStickX) > 10 || abs(receiveFromESP32Data.leftStickY) > 10;
+
+        if (joystickActive) {
+            // Apply joystick-controlled servo positions
+            #ifdef reverseLeftRight
+                leftServoPosition = leftServo_0_Position + joystickPitch - joystickRoll; // Swap left/right input
+            #else
+                leftServoPosition = leftServo_0_Position + joystickPitch + joystickRoll;
+            #endif
+
+            #ifdef reverseForwardBackward
+                rightServoPosition = rightServo_0_Position + joystickPitch + joystickRoll; // Swap back/forward input
+            #else
+                rightServoPosition = rightServo_0_Position + joystickPitch - joystickRoll;
+            #endif
+        }
+        else {
+            // Determine if IMU-based corrections should activate
+            bool imuActive = (abs(receiveFromESP32Data.pitch) > IMU_THRESHOLD) || (abs(receiveFromESP32Data.roll) > IMU_THRESHOLD);
+
+            float error_roll = pitch_setpoint - receiveFromESP32Data.pitch; // Roll uses pitch data
+            float error_pitch = roll_setpoint - receiveFromESP32Data.roll; // Pitch uses roll data
+
+            // Apply deadzone filtering, but add soft correction when below threshold
+            if (abs(error_pitch) < DEADZONE_THRESHOLD) error_pitch *= SOFT_RETURN_FACTOR;  // Weak correction instead of zero
+            if (abs(error_roll) < DEADZONE_THRESHOLD) error_roll *= SOFT_RETURN_FACTOR;  // Weak correction instead of zero
+
+            if (imuActive || abs(error_pitch) > DEADZONE_THRESHOLD || abs(error_roll) > DEADZONE_THRESHOLD) {
+                // Amplify correction factors for more responsive stabilization
+                float pitchCompensationFactor = (error_pitch < 0) ? 4.0 : 2.0; // Stronger for negative corrections
+                float rollCompensationFactor = (error_roll < 0) ? 4.0 : 2.0;   // Stronger for negative corrections
+
+                // PID logic for pitch (forward/backward)
+                error_sum_pitch = constrain(error_sum_pitch + error_pitch, -10, 10); // Prevent integral windup
+                float error_diff_pitch = error_pitch - prev_error_pitch;
+                float pid_pitch_output = ((kp_pitch * error_pitch) + (ki_pitch * error_sum_pitch) + (kd_pitch * error_diff_pitch)) * pitchCompensationFactor;
+                prev_error_pitch = error_pitch;
+
+                // PID logic for roll (left/right)
+                error_sum_roll = constrain(error_sum_roll + error_roll, -10, 10); // Prevent integral windup
+                float error_diff_roll = error_roll - prev_error_roll;
+                float pid_roll_output = ((kp_roll * error_roll) + (ki_roll * error_sum_roll) + (kd_roll * error_diff_roll)) * rollCompensationFactor;
+                prev_error_roll = error_roll;
+
+                // Apply stabilization to servos
+                leftServoPosition = leftServo_0_Position - pid_pitch_output + pid_roll_output;
+                rightServoPosition = rightServo_0_Position - pid_pitch_output - pid_roll_output;
+            }
+        }
+
+        // Constrain servo positions for safe operation
+        leftServoPosition = constrain(leftServoPosition, leftServo_0_Position - SERVO_MIN_OFFSET, leftServo_0_Position + SERVO_MAX_OFFSET);
+        rightServoPosition = constrain(rightServoPosition, rightServo_0_Position - SERVO_MIN_OFFSET, rightServo_0_Position + SERVO_MAX_OFFSET);
+
+        // Write positions to servos
+        myservo2.write(leftServoPosition, servoSpeed);
+        myservo1.write(rightServoPosition, servoSpeed);
     }
-    return targetAngle;
 }
-
-void adjustPitch(int domeTiltAngle, int pitch) {
-    if (domeTiltAngle < 0) {
-        leftServoPosition = leftServo_0_Position - constrain(map((domeTiltAngle - pitch) * dome_pitch_modifier, -40, 0, domeTiltYAxis_Offset, 0), -domeTiltYAxis_Offset, domeTiltYAxis_Offset);
-        rightServoPosition = rightServo_0_Position - constrain(map((domeTiltAngle - pitch) * dome_pitch_modifier, -40, 0, -domeTiltYAxis_Offset, 0), -domeTiltYAxis_Offset, domeTiltYAxis_Offset);
-    } else if (domeTiltAngle > 0) {
-        leftServoPosition = leftServo_0_Position - constrain(map((domeTiltAngle - pitch) * dome_pitch_modifier, 0, 35, 0, -domeTiltYAxis_Offset), -domeTiltYAxis_Offset, domeTiltYAxis_Offset);
-        rightServoPosition = rightServo_0_Position - constrain(map((domeTiltAngle - pitch) * dome_pitch_modifier, 0, 35, 0, domeTiltYAxis_Offset), -domeTiltYAxis_Offset, domeTiltYAxis_Offset);
-    } else if (abs(pitch) >= dome_pitch_threshold) {
-        leftServoPosition = leftServo_0_Position + constrain(map(pitch * dome_pitch_modifier, -40, 35, -domeTiltYAxis_Offset, domeTiltYAxis_Offset), -domeTiltYAxis_Offset, domeTiltYAxis_Offset);
-        rightServoPosition = rightServo_0_Position - constrain(map(pitch * dome_pitch_modifier, -40, 35, -domeTiltYAxis_Offset, domeTiltYAxis_Offset), -domeTiltYAxis_Offset, domeTiltYAxis_Offset);
-    }
-}
-
-void adjustRoll(int domeTiltAngle, int roll) {
-    int rollDirection = (roll <= 0) ? 1 : -1; // Determine direction of roll correction
-    if (domeTiltAngle < 0) {
-        leftServoPosition += map((domeTiltAngle + roll) * dome_roll_modifier, -29, 0, 30, 0);
-        rightServoPosition += map((domeTiltAngle + roll) * dome_roll_modifier, -29, 0, 50, 0);
-    } else if (domeTiltAngle > 0) {
-        leftServoPosition += rollDirection * map((domeTiltAngle + roll) * dome_roll_modifier, 0, 29, 0, 50);
-        rightServoPosition += rollDirection * map((domeTiltAngle + roll) * dome_roll_modifier, 0, 29, 0, 30);
-    } else if (abs(roll) >= dome_roll_threshold) {
-        leftServoPosition += rollDirection * map((domeTiltAngle + roll) * dome_roll_modifier, -29, 29, 30, -30);
-        rightServoPosition += rollDirection * map((domeTiltAngle + roll) * dome_roll_modifier, -29, 29, 50, -50);
-    }
-}
-
-void smoothServoMovement() {
-    leftDifference = abs(leftOldPosition - leftServoPosition);
-    rightDifference = abs(rightOldPosition - rightServoPosition);
-    rightOldPosition += (leftDifference != 0) ? (rightDifference / leftDifference) : 0;
-    leftOldPosition += (rightDifference != 0) ? (leftDifference / rightDifference) : 0;
-
-    if (leftDifference > rightDifference) {
-        leftOldPosition += (leftOldPosition < leftServoPosition) ? 1 : -1;
-        rightOldPosition += (rightOldPosition < rightServoPosition) ? rightDifference / leftDifference : -(rightDifference / leftDifference);
-    } else {
-        rightOldPosition += (rightOldPosition < rightServoPosition) ? 1 : -1;
-        leftOldPosition += (leftOldPosition < leftServoPosition) ? leftDifference / rightDifference : -(leftDifference / rightDifference);
-    }
-}
-
-void applyReverseLogic(int &y_Axis, int &x_Axis, int &tiltY, int &tiltX) {
-    if (reverseDrive) {
-        y_Axis *= -1;
-        x_Axis *= -1;
-        tiltY *= -1;
-        tiltX *= -1;
-    }
-}
-
-// Apply reverse logic at the global scope
-void applyReverseLogic(double &y_Axis, double &x_Axis, double &tiltY, double &tiltX) {
-    y_Axis *= -1;
-    x_Axis *= -1;
-    tiltY *= -1;
-    tiltX *= -1;
-}
-
-void Servos(){
-  int domeTurnPercent;
-  int8_t y_Axis, x_Axis;
-  const int LEFT_SERVO_MIN = leftServo_0_Position - 45;
-  const int LEFT_SERVO_MAX = leftServo_0_Position + 55;
-  const int RIGHT_SERVO_MIN = rightServo_0_Position - 55;
-  const int RIGHT_SERVO_MAX = rightServo_0_Position + 45;
-
-  if (enableDrive) {
-    // Read joystick inputs
-    x_Axis = receiveFromESP32Data.leftStickX;
-    y_Axis = receiveFromESP32Data.leftStickY;
-
-
-    // Map joystick values to dome tilt angles
-    leftStickY = mapJoystickToAngle(y_Axis, domeTiltYAxis_MaxAngle);
-    leftStickX = mapJoystickToAngle(x_Axis, domeTiltXAxis_MaxAngle);
-
-    // Ease dome tilt angles
-    domeTiltAngle_Y_Axis = easeAngle(domeTiltAngle_Y_Axis, leftStickY, servoEase);
-    domeTiltAngle_X_Axis = easeAngle(domeTiltAngle_X_Axis, leftStickX, servoEase);
-
-    // Adjust servo positions for pitch
-    adjustPitch(domeTiltAngle_Y_Axis, receiveFromESP32Data.pitch);
-
-    // Adjust servo positions for roll
-    adjustRoll(domeTiltAngle_X_Axis, receiveFromESP32Data.roll);
-
-    // Smooth servo movement
-    smoothServoMovement();
-
-    // Write positions to servos
-    myservo2.write(constrain(leftOldPosition, LEFT_SERVO_MIN, LEFT_SERVO_MAX), servoSpeed);
-    myservo1.write(constrain(rightOldPosition, RIGHT_SERVO_MIN, RIGHT_SERVO_MAX), servoSpeed);
-  }
-}
-
-
