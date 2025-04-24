@@ -1,17 +1,22 @@
 void debugRoutines(){
 
   #ifdef debugDOME
-    // Debugging output for real-time monitoring
-    Serial.print("Joystick Input: ");
-    Serial.print(joystickInput);
-    Serial.print(" Dome Speed: ");
-    Serial.println(domeSpeed);
-    #ifdef useHallSensor
-      Serial.print("Hall Sensor Value: ");
-      Serial.print(hallSensorValue);
-      Serial.print(" Target Position: ");
-      Serial.println(targetPosition);  
-    #endif
+    // int hallEffectSensor = digitalRead(hallEffectSensor_Pin);
+    // int currentPosition = myEnc.read();
+    // int positionDifference = targetPosition - currentPosition;
+    long encoderCounts = myEnc.read(); // Read the current counts from the encoder
+    float rotationDegrees = (encoderCounts / 1680.0) * 360.0; // Calculate the rotation in degrees
+    Serial.print("Rotation: ");
+    Serial.print(rotationDegrees);
+    Serial.println(" degrees");
+    // SerialDebug.print(F("encPos: ")); SerialDebug.print(encPos); SerialDebug.print('\t');
+    // SerialDebug.print(F("domeCenterSet: ")); SerialDebug.print(domeCenterSet); SerialDebug.print('\t');
+    // SerialDebug.print(F("domeServoMode: ")); SerialDebug.print(domeServoMode); SerialDebug.print('\t');
+    // SerialDebug.print(F("domeSpin: ")); SerialDebug.print(receiveFromESP32Data.domeSpin); SerialDebug.print('\t');
+    // SerialDebug.print(F("positionDifference: ")); SerialDebug.print(positionDifference); SerialDebug.print('\t');
+    // SerialDebug.print(F("targetPosition: ")); SerialDebug.print(targetPosition); SerialDebug.print('\t');
+    // SerialDebug.print(F("hallEffectSensor: ")); SerialDebug.print(hallEffectSensor); SerialDebug.print('\t');
+    // SerialDebug.print(F("enableDrive: ")); Serial.print(enableDrive); SerialDebug.println('\t');
   #endif
   
   #ifdef debugHALLFull
@@ -122,33 +127,13 @@ void debugRoutines(){
 
   #ifdef printPitchAndRoll
     Serial.print("Pitch: "); Serial.print(receiveFromESP32Data.pitch); 
-    Serial.print(" actual pitch: "); Serial.print(pitch); 
-    Serial.print("    Roll: "); Serial.println(receiveFromESP32Data.roll); 
-    Serial.print(" Pitch/LeftServo: ");
-    Serial.print(receiveFromESP32Data.pitch);  Serial.print("  "); 
+    Serial.print(" Roll: "); Serial.println(receiveFromESP32Data.roll); 
     Serial.println(constrain(leftOldPosition,leftServo_0_Position-45,leftServo_0_Position+55));
   #endif
 
-  #ifdef debugServoPositions
-//    Serial.print("Left Servo Position: "); Serial.print(leftServoPosition);
-//    Serial.print(" Right Servo Position: "); Serial.println(rightServoPosition);
-    char formattedValue[8]; // Buffer to hold formatted output (7 characters + null terminator)
-    
-    Serial.print("Left Servo: ");
-    dtostrf(leftServoPosition, 7, 3, formattedValue); // Format: 7 characters wide, 3 decimal places
-    Serial.print(formattedValue);
-    
-    Serial.print(" Right Servo: ");
-    dtostrf(rightServoPosition, 7, 3, formattedValue);
-    Serial.print(formattedValue);
-    
-    Serial.print(" Pitch: ");
-    dtostrf(receiveFromESP32Data.pitch, 7, 3, formattedValue);
-    Serial.print(formattedValue);
-    
-    Serial.print(" Roll: ");
-    dtostrf(receiveFromESP32Data.roll, 7, 3, formattedValue);
-    Serial.println(formattedValue);
+  #ifdef printServoPositions
+    Serial.print(leftServoPosition); 
+    Serial.println("\t");Serial.println(rightServoPosition);  
   #endif
 
   #ifdef debugServos
@@ -157,7 +142,9 @@ void debugRoutines(){
     Serial.print("  domeTiltAngle_X_Axis  "); Serial.print(leftStickY); 
     Serial.print("  domeTiltAngle_Y_Axis  "); Serial.print(domeTiltAngle_Y_Axis);
     Serial.print("  leftOldPosition  "); Serial.print(leftOldPosition);
-    Serial.println("  rightOldPosition  "); Serial.println(rightOldPosition);  
+    Serial.print("  rightOldPosition  "); Serial.println(rightOldPosition);  
+    Serial.print(" Pitch: "); Serial.print(receiveFromESP32Data.pitch); 
+    Serial.println(" Roll: "); Serial.println(receiveFromESP32Data.roll); 
   #endif
   
 }
