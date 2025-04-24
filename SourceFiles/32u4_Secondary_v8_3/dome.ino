@@ -1,106 +1,75 @@
-
-void controlMotor(int pwmValue, bool direction) {
-    pwmValue = constrain(abs(pwmValue), 0, 255);  // Constrain pwmValue to valid range
-    if (direction) {
-        digitalWrite(domeMotor_pin_A, HIGH);
-        digitalWrite(domeMotor_pin_B, LOW);
-    } else {
-        digitalWrite(domeMotor_pin_A, LOW);
-        digitalWrite(domeMotor_pin_B, HIGH);
-    }
-    analogWrite(domeMotor_pwm, pwmValue);
-}
-
-void stopMotor() {
-    digitalWrite(domeMotor_pin_A, LOW);
-    digitalWrite(domeMotor_pin_B, LOW);
-    analogWrite(domeMotor_pwm, 0);
-}
-
-void alignToForwardPosition() {
-    const int forwardPositionValue = 1;  // Hall sensor value for forward position
-    const int alignmentTimeout = 5000;  // Timeout in milliseconds
-    const int alignmentPWM = 100;       // PWM speed for alignment
-    unsigned long startTime = millis();
-
-    while (digitalRead(hallEffectSensor_Pin) != forwardPositionValue) {
-        controlMotor(alignmentPWM, true);  // Rotate motor
-
-        // Check for timeout
-        if (millis() - startTime > alignmentTimeout) {
-            Serial.println("Failed to align to forward position. Timeout reached!");
-            stopMotor();
-            return;
-        }
-    }
-
-    stopMotor();
-    Serial.println("Dome aligned to forward position!");
-}
-
 void spinStuff() {
-    // Map joystick input to domeSpeed
-    int domeSpeed = map(joystickInput, -127, 127, -255, 255);
-
-    // Driving or Free Turning Mode
-    if (enableDrive || !domeServoMode) {
-        if (domeSpeed != 0) {
-            controlMotor(domeSpeed, domeSpeed > 0);  // Motor control based on speed/direction
-        } else {
-            stopMotor();  // Stop if joystick is neutral
-        }
-    }
-
-    // Centering Logic Using Hall Sensor (only when joystick is neutral)
-    #ifdef useHallSensor
-    if (joystickInput == 0 && enableDrive) {  // Joystick centered in driving mode
-        if (!domeCenterSet) {
-            targetPosition = hallSensorValue;  // Set forward position
-            domeCenterSet = true;  // Ensure forward position is set only once
-        }
-
-        int error = targetPosition - myEnc.read();  // Calculate position error
-        int correction = constrain(error * Kp_domeSpinServoPid, -255, 255);  // PID correction
-        if (correction != 0) {
-            controlMotor(correction, correction > 0);  // Correct dome position
-        } else {
-            stopMotor();  // Stop motor if no correction needed
-        }
-    }
-    #endif
+  if(domeServoMode) {
+    // spinDomeServo();
+    // spinDome();
+    returnDomeCenter();
+  }
+    spinDome();
 }
+void spinDome() {
+  encoderCounts = myEnc.read(); // Read the current counts from the encoder
+  rotationDegrees = (encoderCounts / 1680.0) * 360.0; // Calculate the rotation in degrees
+  joystickInput = constrain(receiveFromESP32Data.domeSpin, -127, 127); // Ensure valid input range
+  hallSensorValue = digitalRead(hallEffectSensor_Pin); // Read the Hall sensor value
+  #ifdef EnableFilters
+    joystickInput = adcFilterdomeSpin.filter(joystickInput);
+  #endif
+  if(reverseDrive){
+    joystickInput *= -1;
+  }
+  int motorSpeed = 0; // Variable for motor speed
+  if (hallSensorValue == 0) {
+    myEnc.write(0);
+  }
+  if (joystickInput > domeMotorDeadzone && enableDrive) {
+    motorSpeed = map(joystickInput, 0, 127, 0, 255);
+    digitalWrite(domeMotor_pin_A, LOW);
+    digitalWrite(domeMotor_pin_B, HIGH); // Motor 1 Forward
+    analogWrite(domeMotor_pwm,motorSpeed);
 
+  } else if (joystickInput < -domeMotorDeadzone && enableDrive) {
+    motorSpeed = map(joystickInput, -127, 0, 255, 0);
+    digitalWrite(domeMotor_pin_A, HIGH);
+    digitalWrite(domeMotor_pin_B, LOW); // Motor 1 Backward
+    analogWrite(domeMotor_pwm,motorSpeed);
 
-//void spinStuff() {
-//  if (enableDrive) {
-//    int domeSpeed = map(joystickInput, -127, 127, -255, 255);
-//    if (domeSpeed != 0) {
-//      controlMotor(domeSpeed, domeSpeed > 0);
-//    } else {
-//      stopMotor();
-//    }
-//  }
-//
-//  if (joystickInput == 0 && useHallSensor) {
-//    if (!domeCenterSet) {
-//      targetPosition = hallSensorValue;  // Forward position
-//      domeCenterSet = true;
-//    }
-//    int error = targetPosition - myEnc.read();
-//    int correction = constrain(error * Kp_domeSpinServoPid, -255, 255);
-//    if (correction != 0) {
-//      controlMotor(correction, correction > 0);
-//    } else {
-//      stopMotor();
-//    }
-//  }
-//
-//  if (!domeServoMode) {
-//    int domeSpeed = map(joystickInput, -127, 127, -255, 255);
-//    if (domeSpeed != 0) {
-//      controlMotor(domeSpeed, domeSpeed > 0);
-//    } else {
-//      stopMotor();
-//    }
-//  }
-//}
+  } else {
+    digitalWrite(domeMotor_pin_A, LOW);
+    digitalWrite(domeMotor_pin_B, LOW); // Motor 1 and 2 Stopped
+  }
+  
+}
+void setDomeCenter() {
+  hallSensorValue = digitalRead(hallEffectSensor_Pin); // Read the Hall sensor value
+  while (hallSensorValue != 0) {
+    hallSensorValue = digitalRead(hallEffectSensor_Pin); // Read the Hall sensor value
+    digitalWrite(domeMotor_pin_A, HIGH);
+    digitalWrite(domeMotor_pin_B, LOW); // Motor 1 Backward
+    analogWrite(domeMotor_pwm,75);
+  }
+  digitalWrite(domeMotor_pin_A, LOW); // Motor 2 STOP
+  digitalWrite(domeMotor_pin_B, LOW); // Motor 1 STOP
+  myEnc.write(0);
+}
+void returnDomeCenter() {
+  // Constants for degree limits
+  const float maxDegrees = 40.0;
+  const int maxCounts = (maxDegrees / 360.0) * 1680.0;
+
+  hallSensorValue = digitalRead(hallEffectSensor_Pin); // Read the Hall sensor value
+  encoderCounts = myEnc.read(); // Read the current counts from the encoder
+
+  // Check if the dome is within the allowed range
+  if (abs(encoderCounts) > maxCounts) {
+    // Calculate the direction to move back to the center
+    int direction = encoderCounts > 0 ? -1 : 1;
+
+    // Move the dome back to the center
+    while (abs(encoderCounts) > maxCounts) {
+      encoderCounts = myEnc.read(); // Update the current counts from the encoder
+      digitalWrite(domeMotor_pin_A, direction > 0 ? HIGH : LOW);
+      digitalWrite(domeMotor_pin_B, direction > 0 ? LOW : HIGH);
+      analogWrite(domeMotor_pwm, 200);
+    }
+  }
+}
