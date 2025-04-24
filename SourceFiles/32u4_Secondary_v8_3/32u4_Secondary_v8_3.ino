@@ -12,7 +12,7 @@
  * Libraries Required
  * Feather 32u4 Board Libraries: https://learn.adafruit.com/adafruit-feather-32u4-basic-proto/using-with-arduino-ide
  * Encoder for the ENC on Dome Spin: https://github.com/PaulStoffregen/Encoder
- * Adafruit VS1053 Featherwing MusicPlayer: https://www.adafruit.com/product/1381
+ * Adafruit VS1053 Featherwing MusicPlayer: https://github.com/adafruit/Adafruit_VS1053_Library
  * Servo library - https://github.com/netlabtoolkit/VarSpeedServo
  * Sparkfun MP3 qwiic/i2c Trigger -  https://github.com/sparkfun/SparkFun_Qwiic_MP3_Trigger_Arduino_Library 
  * DF Robots DFPlayer Mini (SKU:DFR0299) Onboard MP3 trigger - https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
@@ -30,7 +30,7 @@
 // #define printRemote
 // #define debugVS
 // #define debugPSI
-// #define debugServoPositions
+// #define printServoPositions
 // #define printPitchAndRoll
 // #define debugServos
 // #define debugDOME
@@ -47,15 +47,19 @@
 #define MOVECONTROLLER
 //#define XBOXCONTROLLER
 
+#define reverseForwardBackward
+#define reverseLeftRight
+
 /*  MP3 Trigger types supported
  *  Still to do: VS105 and Zio
 */
 // #define NoMP3 // Dont want to use MP3 services on this board
 #define MP3Sparkfun  // Enable qwiic/i2c communications to MP3 trigger for Sparkfun
 // #define MP3Zio // Enable qwiic/i2c communications to MP3 trigger for Zio
-// #define MP3VS105 // Enable serial communications to MP3 trigger for Adafruit VS1053 https://www.adafruit.com/product/1381
+// #define MP3VS105 // Enable qwiic/i2c communications to MP3 trigger for Adafruit Featherwing VS105
+// #define MP3DFPlayer // Enable onboard use of the DF Player Mini from DF Robot
 
-#define useHallSensor 1  // Allow use of hall monitor installed to set forward direction of the dome otherwise set via Pref save on Controllers
+#define useHallSensor  // Allow use of hall monitor installed to set forward direction of the dome otherwise set via Pref save on Controllers
 // #define EnableFilters // Providing filtering against raw data reads from ESP32 over serial UNDER_CONSTRUCTION
 // #define UseNEO // If not using RX capabilities from DFplayer can use for NEO Pixel controls of body UNDER_CONSTRUCTION
 // #define checksumValidation
@@ -66,7 +70,9 @@
 #define DEBUG_PRINT(s) SerialDebug.print(s)
 
 
-/* PIN DEFINITIONS */
+/*
+ * PIN DEFINITIONS
+*/
 #define motorEncoder_pin_A 18    //18 A0 - 32u4 Basic Proto/32u4 RF, 14 - 32u4 Proto M0 Feather M0
 #define motorEncoder_pin_B 19    //19 A1 - 32u4 Basic Proto/32u4 RF, 15 - 32u4 Proto M0 Feather M0
 #define domeMotor_pwm 10         // 10 - 32u4 Basic Proto/M0 Proto/32u4 RF
@@ -87,15 +93,11 @@
 #define domeTiltXAxis_MaxAngle 25 // 20
 #define printMillis 5
 
+#define JOYDEADBAND 3 // Reduce deadband for more sensitivity
+#define SMOOTH_FACTOR 0.1 // Reduce smoothing for quicker response
+
 #define leftServoOffset -7
 #define rightServoOffset 0
-#define dome_pitch_modifier 1.5 // Amplifies the response, making the dome tilt adjustments more drastic. You can tweak this multiplier HIGHER for a more aggressive correction
-#define dome_pitch_threshold 5 //Introduced a check if ie. (receiveFromESP32Data.pitch <= -5 || receiveFromESP32Data.pitch >= 5) to ensure even minor pitch deviations trigger corrections.
-#define dome_roll_modifier 1.5 // Amplifies the response, making the dome tilt adjustments more drastic. You can tweak this multiplier HIGHER for a more aggressive correction
-#define dome_roll_threshold 5 //Introduced a check if ie. (receiveFromESP32Data.pitch <= -5 || receiveFromESP32Data.pitch >= 5) to ensure even minor pitch deviations trigger corrections.
-#define domeMotorDeadzone 5
-#define dome_PWM_speed 100 //defining a constant for the default PWM speed to avoid hardcoding 
-
 #define PIN_MP3_TX 5  // Connects to 32u4's 5 for use with DFplayer
 #define PIN_MP3_RX 13  // Connects to 32u4's A4 22 or 13 (NEO) for use with DFplayer
 
@@ -109,14 +111,14 @@
 #endif
 
 #ifdef MP3Sparkfun
-  #include <Wire.h>
-  #include "SparkFun_Qwiic_MP3_Trigger_Arduino_Library.h"  // http://librarymanager/All#SparkFun_MP3_Trigger
-  #include "Arduino.h"
-  MP3TRIGGER mp3;
-  byte mp3Address = 0x37;  // default address for Qwiic MP3
-  byte adjustableNumber = 1;
-  int randomsound = random(1, 55);
-  int8_t sound;
+#include <Wire.h>
+#include "SparkFun_Qwiic_MP3_Trigger_Arduino_Library.h"  // http://librarymanager/All#SparkFun_MP3_Trigger
+#include "Arduino.h"
+MP3TRIGGER mp3;
+byte mp3Address = 0x37;  // default address for Qwiic MP3
+byte adjustableNumber = 1;
+int randomsound = random(1, 55);
+int8_t sound;
 #endif
 
 #ifdef MP3DFPlayer
@@ -132,22 +134,23 @@
 #endif
 
 #ifdef MP3VS105
-  #include <SPI.h> // include SPI, MP3 and SD libraries
-  #include <SD.h>
-  #include <Adafruit_VS1053.h>
-  
-  #define VS1053_RESET -1  // VS1053 reset pin (not used!)
-  #define VS1053_CS 6      // VS1053 chip select pin (output)
-  #define VS1053_DCS 10    // VS1053 Data/command select pin (output)
-  #define CARDCS 5         // Card chip select pin
-  // DREQ should be an Int pin *if possible* (not possible on 32u4)
-  #define VS1053_DREQ 9  // VS1053 Data request, ideally an Interrupt pin
-  
-  Adafruit_VS1053_FilePlayer musicPlayer =
-  Adafruit_VS1053_FilePlayer(VS1053_RESET, VS1053_CS, VS1053_DCS, VS1053_DREQ, CARDCS);
-  int randomsound = random(1, 55);
-  int8_t sound;
-  String FileName;
+// include SPI, MP3 and SD libraries
+#include <SPI.h>
+#include <SD.h>
+#include <Adafruit_VS1053.h>
+
+#define VS1053_RESET -1  // VS1053 reset pin (not used!)
+#define VS1053_CS 6      // VS1053 chip select pin (output)
+#define VS1053_DCS 10    // VS1053 Data/command select pin (output)
+#define CARDCS 5         // Card chip select pin
+// DREQ should be an Int pin *if possible* (not possible on 32u4)
+#define VS1053_DREQ 9  // VS1053 Data request, ideally an Interrupt pin
+
+Adafruit_VS1053_FilePlayer musicPlayer =
+Adafruit_VS1053_FilePlayer(VS1053_RESET, VS1053_CS, VS1053_DCS, VS1053_DREQ, CARDCS);
+int randomsound = random(1, 55);
+int8_t sound;
+String FileName;
 #endif
 
 // include Easy Transfer library and support configurations for communications to/from ESP32
@@ -183,14 +186,6 @@ double rightServoPosition = rightServo_0_Position;
 double leftDifference, leftOldPosition = leftServo_0_Position, rightDifference, rightOldPosition = rightServo_0_Position;
 double domeTiltAngle_X_Axis, domeTiltAngle_Y_Axis, leftStickY, leftStickX, encPos, batt_Voltage;
 
-//int y_Axis = receiveFromESP32Data.leftStickY;
-//int x_Axis = receiveFromESP32Data.leftStickX;
-//int domeTiltAngle_Y_Axis = 0; // Or initialize as needed
-//int domeTiltAngle_X_Axis = 0; // Or initialize as needed
-const int LEFT_SERVO_MIN = leftServo_0_Position - 45;
-const int LEFT_SERVO_MAX = leftServo_0_Position + 55;
-const int RIGHT_SERVO_MIN = rightServo_0_Position - 55;
-const int RIGHT_SERVO_MAX = rightServo_0_Position + 45;
 
 // int Joy2Ya, Joy2XLowOffset, Joy2XHighOffset, Joy2XLowOffsetA, Joy2XHighOffsetA, ServoLeft, ServoRight;
 // double Joy2X, Joy2Y, LeftJoy2X, LeftJoy2Y, Joy2XEase, Joy2YEase,  Joy2XEaseMap;
@@ -199,6 +194,25 @@ const int RIGHT_SERVO_MAX = rightServo_0_Position + 45;
 float R1 = 30000.0;  //30k
 float R2 = 7500.0;   //7.5k5 or 7k5
 float pitch, roll;
+
+// PID Parameters
+float kp_pitch = 1.0;  // Proportional constant for pitch
+float ki_pitch = 0.1;  // Integral constant for pitch
+float kd_pitch = 0.05; // Derivative constant for pitch
+
+float kp_roll = 1.0;   // Proportional constant for roll
+float ki_roll = 0.1;   // Integral constant for roll
+float kd_roll = 0.05;  // Derivative constant for roll
+
+// PID Variables
+float error_pitch, error_sum_pitch = 0, error_diff_pitch, prev_error_pitch = 0;
+float error_roll, error_sum_roll = 0, error_diff_roll, prev_error_roll = 0;
+
+unsigned long prevMillis_pitch = 0, prevMillis_roll = 0;
+float pitch_setpoint = 0.0; // Desired pitch (level)
+float roll_setpoint = 0.0;  // Desired roll (centered)
+float previous_pitch = 0.0; // Stores the previous pitch value for smoothing
+float previous_roll = 0.0;  // Stores the previous roll value for smoothing
 
 volatile long encoderPosition = 0;
 volatile bool aState;
@@ -249,6 +263,11 @@ long encoderCounts;
 float rotationDegrees;
 int joystickInput;
 
+
+float smoothX = 0;
+float smoothY = 0;
+
+
 //Specify the links and initial tuning parameters for MyPID
 double Kp_domeSpinServoPid = 4, Ki_domeSpinServoPid = 0, Kd_domeSpinServoPid = 0;
 PID myPID_domeSpinServoPid(&Input_domeSpinServoPid, &Output_domeSpinServoPid, &Setpoint_domeSpinServoPid, Kp_domeSpinServoPid, Ki_domeSpinServoPid, Kd_domeSpinServoPid, DIRECT);
@@ -257,6 +276,28 @@ void setup() {
   // delay(100000); 
   Serial.begin(115200);
   Serial1.begin(74880);  // 74880 78440 57600
+
+#ifdef MP3DFPlayer
+  FPSerial.begin(9600);
+  Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+  // if (myDFPlayer.begin(FPSerial, /*isACK = */ true, /*doReset = */ true)) {  //Use serial to communicate with mp3.
+  // // if (!myDFPlayer.begin(FPSerial, true, false)) {
+  //   Serial.println(F("DFPlayer Mini online."));
+  //   myDFPlayer.volume(20);  //Set volume value. From 0 to 30
+  //   myDFPlayer.play(1);     //Play the first mp3
+  // } else if (!myDFPlayer.begin(FPSerial, /*isACK = */ true, /*doReset = */ true)) {
+  //   Serial.println(F("Unable to begin:"));
+  //   Serial.println(F("1.Please recheck the connection!"));
+  //   Serial.println(F("2.Please insert the SD card!"));
+  // }
+  if (myDFPlayer.begin(FPSerial, true, false)) {
+    Serial.println("DFPlayer Mini initialized successfully!");
+    myDFPlayer.volume(30); // Set volume to maximum (0 to 30)
+    myDFPlayer.playMp3Folder(1); // Play the "0001.mp3" in the "mp3" folder
+  } else {
+    Serial.println("Connecting to DFPlayer Mini failed!");
+  }
+#endif
 
 #ifdef MP3Sparkfun
   delay(5000);
@@ -286,6 +327,7 @@ void setup() {
 #endif
 
 #ifdef MP3VS105
+
   if (!musicPlayer.begin()) {  // initialise the music player
     Serial.println(F("Couldn't find VS1053, do you have the right pins defined?"));
     while (1)
@@ -312,6 +354,10 @@ void setup() {
   // Timer interrupts are not suggested, better to use DREQ interrupt!
   // but we don't have them on the 32u4 feather...
   musicPlayer.useInterrupt(VS1053_FILEPLAYER_TIMER0_INT);  // timer int
+
+// If DREQ is on an interrupt pin we can do background
+// audio playing
+//  musicPlayer.useInterrupt(VS1053_FILEPLAYER_PIN_INT);  // DREQ int
 #endif
 
   myservo2.attach(leftServo_pin);
@@ -340,8 +386,7 @@ void setup() {
     domeCenterSet = true; 
     myEnc.write(0); //740
   #else
-    // Align the dome to the forward position
-    alignToForwardPosition();
+    setDomeCenter();
   #endif 
 }
 
@@ -349,8 +394,12 @@ void loop() {
   Timechecks();
   SendRecieveData();
   if (enableDrive) {
+//    encoder();
     Servos();
     spinStuff();
+//    if(!domeCenterSet){
+//      setDomeCenter(); 
+//    }
   }
 
   Timechecks();
