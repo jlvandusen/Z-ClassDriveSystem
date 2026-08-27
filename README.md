@@ -55,6 +55,8 @@ and everything about flashing/tuning them is in the control repo:
 | imu | Trinket M0 + MPU6050 | `firmware/TrinketM0_MPU_RC4` — Kalman pitch/roll at 100 Hz |
 | dome | ESP32 HUZZAH32 Feather | `firmware/ESP32_DOME_RC4` — lights, battery, wireless console bridge |
 
+![drive system complete](drivesystem_v10mainboard.png)
+
 ## What's in this repo
 
 | Folder / file | Contents |
