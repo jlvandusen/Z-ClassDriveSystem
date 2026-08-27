@@ -29,7 +29,7 @@ assemble it.
 > it was fully superseded by the RC4 firmware in the control repo
 > (`SourceFiles/README.md` maps each old sketch to its replacement).
 
-![Z-Class System v2](Z-Class%20System%20v2.png)
+![drive system complete](drivesystem_complete.png)
 
 ## The drive at a glance
 
