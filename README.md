@@ -43,6 +43,8 @@ assemble it.
 | **Dome by radio** | Body ↔ dome over ESP-NOW — no WiFi network, no pairing. The dome's USB port doubles as a wireless console into the sealed ball. |
 | **Audio** | DFPlayer Mini on the body node — an SD card of `MP3/NNNN.mp3` clips, every cue remappable at runtime (see the control repo's How-To §5). |
 
+![drive system complete](drivesystem_gears.png)
+
 ## Electronics
 
 Four boards, all Adafruit-form-factor; what each does, how they wire together,
@@ -87,3 +89,5 @@ and everything about flashing/tuning them is in the control repo:
 The Z-Class drive shares its lineage with **Joe's Drive V2** — several printed
 parts remain Mk2-compatible (see `BMM/`). Thanks to Joe and the BB-8 builders
 community.
+
+![drive system complete](drivesystem_potgear.png)
